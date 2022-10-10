@@ -188,7 +188,7 @@ def run(
     if isinstance(names, (list, tuple)):  # old format
         names = dict(enumerate(names))
     class_map = coco80_to_coco91_class() if is_coco else list(range(1000))
-    s = ('%22s' + '%11s' * 6) % ('Class', 'Images', 'Instances', 'P', 'R', 'mAP50', 'mAP50-95')
+    s = ('%28s' + '%11s' * 6) % ('Class', 'Images', 'Instances', 'Precision', 'Recall', 'mAP50', 'mAP50-95')
     tp, fp, p, r, f1, mp, mr, map50, ap50, map = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
     dt = Profile(), Profile(), Profile()  # profiling times
     loss = torch.zeros(3, device=device)
@@ -279,7 +279,7 @@ def run(
     nt = np.bincount(stats[3].astype(int), minlength=nc)  # number of targets per class
 
     # Print results
-    pf = '%22s' + '%11i' * 2 + '%11.3g' * 4  # print format
+    pf = '%28s' + '%11i' * 2 + '%11.3f' * 4  # print format
     LOGGER.info(pf % ('all', seen, nt.sum(), mp, mr, map50, map))
     if nt.sum() == 0:
         LOGGER.warning(f'WARNING ⚠️ no labels found in {task} set, can not compute metrics without labels')
@@ -297,7 +297,7 @@ def run(
 
     # Plots
     if plots:
-        confusion_matrix.plot(save_dir=save_dir, names=list(names.values()))
+        confusion_matrix.plot(save_dir=save_dir, names=list(names.values()), task=task)
         callbacks.run('on_val_end', nt, tp, fp, p, r, f1, ap, ap50, ap_class, confusion_matrix)
 
     # Save JSON

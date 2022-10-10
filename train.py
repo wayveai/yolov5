@@ -206,7 +206,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
     if RANK in {-1, 0}:
         val_loader = create_dataloader(val_path,
                                        imgsz,
-                                       batch_size // WORLD_SIZE * 2,
+                                       batch_size // WORLD_SIZE,
                                        gs,
                                        single_cls,
                                        hyp=hyp,
@@ -347,7 +347,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
             final_epoch = (epoch + 1 == epochs) or stopper.possible_stop
             if not noval or final_epoch:  # Calculate mAP
                 results, maps, _ = validate.run(data_dict,
-                                                batch_size=batch_size // WORLD_SIZE * 2,
+                                                batch_size=batch_size // WORLD_SIZE,
                                                 imgsz=imgsz,
                                                 half=amp,
                                                 model=ema.ema,
@@ -368,6 +368,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
 
             # Save model
             if (not nosave) or (final_epoch and not evolve):  # if save
+                LOGGER.warning('Saving model')
                 ckpt = {
                     'epoch': epoch,
                     'best_fitness': best_fitness,
@@ -380,7 +381,12 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
                     'date': datetime.now().isoformat()}
 
                 # Save last, best and delete
+                last_modif_time = last.stat().st_mtime if last.exists() else 0
                 torch.save(ckpt, last)
+
+                if not last.exists() or last.stat().st_mtime == last_modif_time:
+                    for i in range(10):
+                        LOGGER.warning(f'Last checkpoint failed to create or update.')
                 if best_fitness == fi:
                     torch.save(ckpt, best)
                 if opt.save_period > 0 and epoch % opt.save_period == 0:
@@ -408,7 +414,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
                     LOGGER.info(f'\nValidating {f}...')
                     results, _, _ = validate.run(
                         data_dict,
-                        batch_size=batch_size // WORLD_SIZE * 2,
+                        batch_size=batch_size // WORLD_SIZE,
                         imgsz=imgsz,
                         model=attempt_load(f, device).half(),
                         iou_thres=0.65 if is_coco else 0.60,  # best pycocotools at iou 0.65

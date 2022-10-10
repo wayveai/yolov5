@@ -168,7 +168,11 @@ class ConfusionMatrix:
         for i, gc in enumerate(gt_classes):
             j = m0 == i
             if n and sum(j) == 1:
-                self.matrix[detection_classes[m1[j]], gc] += 1  # correct
+                try:
+                    self.matrix[detection_classes[m1[j]], gc] += 1  # correct
+                except Exception as e:
+
+                    raise Exception(str((self.matrix.shape, detection_classes.shape, detection_classes[m1[j]],  m1[j], gc))) from e
             else:
                 self.matrix[self.nc, gc] += 1  # true background
 
@@ -187,7 +191,7 @@ class ConfusionMatrix:
         return tp[:-1], fp[:-1]  # remove background class
 
     @TryExcept('WARNING ⚠️ ConfusionMatrix plot failure: ')
-    def plot(self, normalize=True, save_dir='', names=()):
+    def plot(self, normalize=True, save_dir='', names=(), task: str=''):
         import seaborn as sn
 
         array = self.matrix / ((self.matrix.sum(0).reshape(1, -1) + 1E-9) if normalize else 1)  # normalize columns
@@ -213,7 +217,7 @@ class ConfusionMatrix:
                        yticklabels=ticklabels).set_facecolor((1, 1, 1))
         ax.set_ylabel('True')
         ax.set_ylabel('Predicted')
-        ax.set_title('Confusion Matrix')
+        ax.set_title(f'Confusion Matrix [{task}]')
         fig.savefig(Path(save_dir) / 'confusion_matrix.png', dpi=250)
         plt.close(fig)
 
