@@ -137,80 +137,44 @@ def get_image_files(root: Optional[Union[Path, str]] = None):
 
 
 
-def main_single_thread():
-    print('Main single threaded')
-    image_size = 1280
-    device = 4
-    batch_size = 32
-    dst_file = Path('/mnt/remote/data/users/thomasssajot/yolov5/notebooks/cache/yolov5x6_1280_multi_label_entron_tl_classification_1280_get_colour_most_relevant.txt')
-
-    model_path = '/mnt/remote/data/users/thomasssajot/yolov5/runs/traffic_light_2020_undistorted/yolov5x6_1280_multi_label/weights/best.pt'
-    model = get_model(model_path, device=device)
-    images = get_image_files()
-
-    if dst_file.exists():
-        with dst_file.open('r') as f:
-            predictions = json.load(f)
-        len_before = len(images)
-        images = [i for i in images if i not in predictions]
-        print(f'Found {len_before - len(images)} predictions already saved. Predicting for remaing {len(images)}.')
-
-    else:
-        predictions = dict()
-        
-
-
-    loader = DataLoader(dataset=images, batch_size=batch_size, shuffle=False, num_workers=16) 
-
-    with torch.no_grad():
-        for batch in tqdm(loader, ncols=140, desc=f'Predictions'):
-            res = model(batch, size=image_size)
-            for image_file, df in zip(batch, res.pandas().xyxyn):
-                label = get_colour_of_most_relevant(df)
-                predictions[image_file] = label
-    with Path('/mnt/remote/data/users/thomasssajot/yolov5/notebooks/cache/yolov5x6_1280_multi_label_entron_tl_classification_1280_get_colour_most_relevant.txt').open('w') as f:
-        json.dump(predictions, f)
-
-
-
-
 # Multi threading
-def run_inference(model, dataset, image_size, batch_size: int = 32) -> Dict[str, str]:
-    print(f'Processing {len(dataset)} images on  device {model.model.device}.')
+def run_inference(model, dataset, image_size, result_queue: mp.Queue,  batch_size: int = 32) -> Dict[str, str]:
     loader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=False, num_workers=8) 
-
     results = dict()
     with torch.no_grad():
-        for batch in tqdm(loader, ncols=140, desc=f'Predictions on device {model.model.device}'):
+        for batch in tqdm(loader, ncols=140, desc=f'Predictions on device'):
             res = model(batch, size=image_size)
             for image_file, df in zip(batch, res.pandas().xyxyn):
                 label = get_colour_of_most_relevant(df)
-                results[image_file] = label
+                result_queue.put((image_file, label))
     return results 
+
 
 def main_multi_threading():
     print('main_multi_threading')
     image_size = 1280
     batch_size = 4
     model_path = '/mnt/remote/data/users/thomasssajot/yolov5/runs/traffic_light_2020_undistorted/yolov5x6_1280_multi_label/weights/best.pt'
-    model6 = get_model(model_path, device='5,6')
-    model5 = get_model(model_path, device='6,5')
-    print([m.model.device for m in [model5, model6]])
+    devices = [5, 6]
+    n = len(devices)
+    models = [get_model(model_path, device=f'cuda:{d}') for d in devices]
 
-    images = get_image_files('/mnt/remote/data/users/thomasssajot/yolo_dataset/traffic_lights_entron_classification/focal_len=650__sensor_size_hw=1200x1920/GREEN_SOLID/brizo/')
-    model6(images[:64])
-    model5(images[:64])
-    # threads = [threading.Thread(target=run_inference, args=[m, [im for im in images if hash(im) % n == i], image_size, batch_size], daemon=True) for i, m in enumerate(models)]
-    # for thread in threads:
-    #     thread.start()
+    images = get_image_files('/mnt/remote/data/users/thomasssajot/yolo_dataset/traffic_lights_entron_classification/focal_len=650__sensor_size_hw=1200x1920/AMBER_SOLID/brizo/')
+    result_queue = mp.Queue()
+    threads = [
+        threading.Thread(target=run_inference, args=[m, [im for im in images if hash(im) % n == i], image_size, result_queue, batch_size], daemon=True) for i, m in enumerate(models)
+    ]
+    for thread in threads:
+        thread.start()
 
-    # res = []
-    # for thread in threads:
-    #     res.append(thread.join())
-    # print(res)
+    for thread in threads:
+        thread.join()
 
-    # with Path('/mnt/remote/data/users/thomasssajot/yolov5/notebooks/cache/yolov5x6_1280_multi_label_entron_tl_classification_1280_get_colour_most_relevant.txt').open('w') as f:
-    #     json.dump(predictions, f)
+    while not result_queue.empty():
+        print(result_queue.get())
+
+    with Path('/mnt/remote/data/users/thomasssajot/yolov5/notebooks/cache/to_delete/dump.txt').open('w') as f:
+        json.dump(predictions, f)
 
 
 if __name__ == "__main__":

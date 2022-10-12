@@ -105,7 +105,12 @@ def device_count():
 
 
 def select_device(device='', batch_size=0, newline=True):
-    print('Device selection, given device:', device)
+    if device is not None and str(device).startswith('mp_inference:'):
+        # device = 'mp_inference:cuda:0'
+        device = device.replace('mp_inference:', '')
+        print('WARNING, select device has been modified:', device)
+        return torch.device(device)
+
     # device = None or 'cpu' or 0 or '0' or '0,1,2,3'
     s = f'YOLOv5 🚀 {git_describe() or file_date()} Python-{platform.python_version()} torch-{torch.__version__} '
     device = str(device).strip().lower().replace('cuda:', '').replace('none', '')  # to string, 'cuda:0' to '0'

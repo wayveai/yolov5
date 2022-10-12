@@ -334,7 +334,6 @@ class DetectMultiBackend(nn.Module):
         cuda = torch.cuda.is_available() and device.type != 'cpu'  # use CUDA
 
         if pt:  # PyTorch
-            print('PYTORCH LOADING')
             model = attempt_load(weights if isinstance(weights, list) else w, device=device, inplace=True, fuse=fuse)
             stride = max(int(model.stride.max()), 32)  # model stride
             names = model.module.names if hasattr(model, 'module') else model.names  # get class names
