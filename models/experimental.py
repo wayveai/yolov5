@@ -77,10 +77,7 @@ def attempt_load(weights, device=None, inplace=True, fuse=True):
     model = Ensemble()
     for w in weights if isinstance(weights, list) else [weights]:
         ckpt = torch.load(attempt_download(w), map_location='cpu')  # load
-        print('Setting up for device:', device)
         ckpt = (ckpt.get('ema') or ckpt['model']).to(device).float()  # FP32 model
-        print(type(ckpt))
-        print('ckpt is on device:', next(ckpt.parameters()).device)
 
         # Model compatibility updates
         if not hasattr(ckpt, 'stride'):
@@ -103,7 +100,6 @@ def attempt_load(weights, device=None, inplace=True, fuse=True):
 
     # Return model
     if len(model) == 1:
-        print('Model is on device:', next(model[-1].parameters()).device)
         return model[-1]
 
     # Return detection ensemble
