@@ -41,6 +41,7 @@ def get_model(path, device: int):
 
 def get_image_files(root: Union[Path, str]):
     root = Path(root)
+    assert root.exists()
     print('Looking for images in:', root)
 
     images = [f for f in tqdm(root.glob('**/*.jpeg'), ncols=120, desc="Loading images")]
@@ -58,6 +59,7 @@ def extract_traffic_light_colour_from_cross_product(df: pd.DataFrame) -> dict:
     mask = df['class'].isin([5, 7, 9, 11])
     if  len(df) == 0 or not mask.any():
         traffic_light_colour = 'NONE'
+        traffic_light_conf = 0
     else:
         most_relevant_idx = df[mask]['confidence'].idxmax()
         traffic_light_colour, traffic_light_conf = df.loc[most_relevant_idx][['name', 'confidence']]
@@ -74,7 +76,7 @@ def extract_traffic_light_colour_from_multi_label(df: pd.DataFrame) -> dict:
     df_colours = df[df['class'] <= 5]
     
     if len(relevant) == 0 or len(df_colours) == 0:
-        return 'NONE'
+        return 'NONE', 0
     relevant = relevant.sort_values('confidence', ascending=False).iloc[0]
     df_colours = df[df['class'] <= 5]
     row_idx = df_colours.apply(lambda y: area(relevant, y), axis=1).argmax()
@@ -114,17 +116,20 @@ def main(dst_file: str, model_path: str, image_root: str, post_processing_func, 
                 predictions[image_file] = label
 
     with dst_file.open('w') as f:
-        json.dump(dict(predictions=predictions, metadata=metadata), f, indent=4)
+        json.dump(dict(metadata=metadata, predictions=predictions), f, indent=4)
 
 
 
 def main_mp(dst_file: str, model_path: str, image_root: str, post_processing_func, device: List[str], image_size: int = 1280, batch_size: int = 32):
     print('Main Multi-Threaded')
+    print(image_root)
     dst_file = Path(dst_file)
+    image_root = Path(image_root)
 
     assert dst_file.parent.exists()
+    assert image_root.exists()
 
-    metadata = dict(model=str(model_path), image_size=image_size, image_root=image_root)
+    metadata = dict(model=str(model_path), image_size=image_size, image_root=str(image_root))
     n = len(device)
     models = [get_model(model_path, device=d) for d in device]
     images = get_image_files(image_root)
@@ -147,8 +152,7 @@ def main_mp(dst_file: str, model_path: str, image_root: str, post_processing_fun
             for batch in tqdm(loader, ncols=140, desc=f'Predictions on device'):
                 res = model(batch, size=image_size)
                 for image_file, df in zip(batch, res.pandas().xyxyn):
-                    label = post_processing_func(df)
-                    queue.put((image_file, label))
+                    queue.put((image_file, post_processing_func(df)))
     
     threads = [
         Thread(
@@ -161,6 +165,7 @@ def main_mp(dst_file: str, model_path: str, image_root: str, post_processing_fun
         thread.start()
 
     for thread in threads:
+        print('Joining')
         thread.join()
 
     predictions = dict()
@@ -170,7 +175,8 @@ def main_mp(dst_file: str, model_path: str, image_root: str, post_processing_fun
 
     print(f'Saving to file {len(predictions)} predictions')
     with dst_file.open('w') as f:
-        json.dump(dict(predictions=predictions, metadata=metadata), f, indent=4)
+        json.dump(dict(metadata=metadata, predictions=predictions), f, indent=4)
+    print('Done saving file.')
 
 
 
@@ -204,7 +210,7 @@ if __name__ == "__main__":
     main_mp(
         dst_file=opt.dst, 
         model_path=opt.weights, 
-        image_root=opt.data,
+        image_root=Path(opt.data).resolve(),
         image_size=opt.imgsz,
         post_processing_func=post_processing_func, 
         device=opt.device, 
