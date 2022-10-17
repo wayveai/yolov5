@@ -148,10 +148,14 @@ def main_mp(dst_file: str, model_path: str, image_root: str, post_processing_fun
 
     def run_inference(model, dataset, image_size, queue: mp.Queue,  batch_size: int = 32) -> Dict[str, str]:
         loader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=False, num_workers=8) 
+        names = {int(k): v for k, v in model.names.items()}
+
         with torch.no_grad():
-            for batch in tqdm(loader, ncols=140, desc=f'Predictions on device'):
+            for batch in tqdm(loader, ncols=140, desc=f'Predictions on device {model.device}'):
                 res = model(batch, size=image_size)
                 for image_file, df in zip(batch, res.pandas().xyxyn):
+                    # convert the class (an integer) into its class name
+                    df['name'] = df['class'].astype(int).map(names.get)
                     queue.put((image_file, post_processing_func(df)))
     
     threads = [

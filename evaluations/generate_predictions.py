@@ -26,42 +26,29 @@ def get_model(path, device: int):
     return model
 
 
-def get_image_files(root: Union[Path, str]):
+def get_image_files(root: Union[Path, str]) -> List[str]:
+    """Find all .jpeg files in nested directories"""
     root = Path(root)
     assert root.exists()
+    root = root.resolve()
     print('Looking for images in:', root)
 
     images = [f for f in tqdm(root.glob('**/*.jpeg'), ncols=120, desc="Loading images")]
     print(f'Found {len(images)} images.')
     assert all([f.exists() for f in tqdm(images, ncols=120, desc="Checking if images exists.")])
 
-    return [str(i.resolve()) for i in images]
+    return [str(i) for i in images]
 
 
 
-def main_mp(dst_file: str, model_path: str, image_root: str, device: List[str], image_size: int = 1280, batch_size: int = 32):
+def main_mp(dst_file: Path, model_path: Path, image_root: Path, device: List[str], image_size: int = 1280, batch_size: int = 32):
     print('Main Multi-Threaded')
     print(image_root)
-    dst_file = Path(dst_file)
-    image_root = Path(image_root)
-
-    assert dst_file.parent.exists()
-    assert image_root.exists()
 
     n = len(device)
     models = [get_model(model_path, device=d) for d in device]
     metadata = dict(model=str(model_path), names=models[0].names, image_size=image_size, image_root=str(image_root))
     images = get_image_files(image_root)
-
-    if dst_file.exists():
-        with dst_file.open('r') as f:
-            predictions = json.load(f)
-        assert metadata == predictions.get('metadata'), f"Metadata are different {metadata} != {predictions.get('metadata')}"
-        len_before = len(images)
-        images = [i for i in images if i not in predictions]
-        print(f'Found {len_before - len(images)} predictions already saved. Predicting for remaing {len(images)}.')
-    else:
-        predictions = dict()
 
     result_queue = mp.Queue()
 
@@ -71,6 +58,7 @@ def main_mp(dst_file: str, model_path: str, image_root: str, device: List[str], 
             for batch in tqdm(loader, ncols=140, desc=f'Predictions on device'):
                 res = model(batch, size=image_size)
                 for image_file, labels in zip(batch, res.xyxyn):
+                    labels = labels.cpu().detach().numpy().tolist()
                     queue.put((image_file, labels))
     
     threads = [
@@ -84,7 +72,6 @@ def main_mp(dst_file: str, model_path: str, image_root: str, device: List[str], 
         thread.start()
 
     for thread in threads:
-        print('Joining')
         thread.join()
 
     predictions = dict()
@@ -108,20 +95,31 @@ def parse_opt():
     parser.add_argument('--device', default=[0], type=int, nargs='+')
     parser.add_argument('--dst', type=str, help='save results into file')
     opt = parser.parse_args()
+
     if isinstance(opt.device, int):
         opt.device = [opt.device]
     opt.device = [f'mp_inference:cuda:{i}' for i in opt.device]
-    print(vars(opt))
+    opt.data = Path(opt.data).resolve()
+    opt.dst = Path(opt.dst).resolve()
+
+    assert opt.data.exists()
+    assert opt.dst.parent.exists()
+    if opt.dst.exists():
+        raise FileExistsError(f'Destination file already exists: {opt.dst}')
+
     return opt
 
 
 if __name__ == "__main__":
+    print('\n' * 2)
+    print('=' * 100)
+
     opt = parse_opt()
 
     main_mp(
         dst_file=opt.dst, 
         model_path=opt.weights, 
-        image_root=Path(opt.data).resolve(),
+        image_root=opt.data,
         image_size=opt.imgsz,
         device=opt.device, 
         batch_size=opt.batch_size
