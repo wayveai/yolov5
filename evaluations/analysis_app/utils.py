@@ -1,10 +1,11 @@
 import streamlit as st
 from hashlib import sha256
-from sklearn.metrics import classification_report,  confusion_matrix, ConfusionMatrixDisplay
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 import matplotlib.pyplot as plt
 from PIL import Image, ImageFont, ImageDraw
 import altair as alt
 import pandas as pd
+from pandas.api.types import is_float_dtype, is_integer_dtype
 
 def add_tablet(s: str):
     tablet = ['🔴', '🟠', '🟡', '🟢', '🔵', '🟣', '🟤', '⚫', '🟥', '🟦', '🟧', '🟨', '🟩', '🟪', '🟫', '⬛']
@@ -36,11 +37,12 @@ def _draw_bbox_with_text(draw, xy, text, size):
     draw.rectangle(xy, outline='red', width=2)
         
 def draw_annotations(image, annotations, size: int = 30):
-    width, height = image.size
-    annotations[['x0', 'y0', 'x1', 'y1']] = annotations[['x0', 'y0', 'x1', 'y1']].astype(float)
-    annotations[['x0', 'x1']] *= width
-    annotations[['y0', 'y1']] *= height
-    annotations[['x0', 'y0', 'x1', 'y1']] = annotations[['x0', 'y0', 'x1', 'y1']].astype(int)
+    if is_float_dtype(annotations['x0']):
+        width, height = image.size
+        annotations[['x0', 'y0', 'x1', 'y1']] = annotations[['x0', 'y0', 'x1', 'y1']].astype(float)
+        annotations[['x0', 'x1']] *= width
+        annotations[['y0', 'y1']] *= height
+        annotations[['x0', 'y0', 'x1', 'y1']] = annotations[['x0', 'y0', 'x1', 'y1']].astype(int)
     
     draw = ImageDraw.Draw(image)
     for _, (label, conf, *xy) in annotations[['name', 'confidence', 'x0', 'y0', 'x1', 'y1']].iterrows():

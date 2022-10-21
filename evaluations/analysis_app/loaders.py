@@ -53,21 +53,67 @@ def load_predictions(file: Path) -> dict:
     return payload['metadata'], predictions_to_dataframe(payload)
 
 
+def get_model_type(metadata: dict):
+    """Given the type of classes predicted decide if the model is CROSS PRODUCT or Multi label"""
+    labels = list(metadata['names'].values())
+    if 'RELEVANT' in labels and 'NON_RELEVANT' in labels:
+        return 'multi_label'
+    assert all(x.endswith('_RELEVANT') for x in labels), labels
+    return 'cross_prod'
 
-def get_classification_df(predictions: pd.DataFrame, gt: pd.DataFrame):
-    mask = predictions['name'].isin(['RED_SOLID_RELEVANT', 'GREEN_SOLID_RELEVANT', 'AMBER_SOLID_RELEVANT', 'RED_AND_AMBER_RELEVANT'])
-    if mask.sum() <= 100:
-       st.error('There are almost no outputs with the values we are looking for. Are you looking for the right output classes?')
-       st.stop() 
-    classification_preds = predictions[mask].reset_index(drop=True)
-    classification_preds = classification_preds.sort_values(['file', 'confidence'], ascending=False).drop_duplicates(['file']).reset_index(drop=True)
-    classification_preds['pred'] = classification_preds['name'].str.replace('_RELEVANT', '')
+def get_classification_df(predictions: pd.DataFrame, gt: pd.DataFrame, metadata: dict):
+    model_label_type = get_model_type(metadata)
+
+    if model_label_type == 'cross_prod':
+        mask = predictions['name'].isin(['RED_SOLID_RELEVANT', 'GREEN_SOLID_RELEVANT', 'AMBER_SOLID_RELEVANT', 'RED_AND_AMBER_RELEVANT'])
+        if mask.sum() <= 100:
+            st.error('There are almost no outputs with the values we are looking for. Are you looking for the right output classes?')
+            st.stop() 
+        classification_preds = predictions[mask].reset_index(drop=True)
+        classification_preds = classification_preds.sort_values(['file', 'confidence'], ascending=False).drop_duplicates(['file']).reset_index(drop=True)
+        classification_preds['pred'] = classification_preds['name'].str.replace('_RELEVANT', '')
+
+    elif model_label_type == 'multi_label':
+        mask = predictions['name'].isin(['RED_SOLID', 'AMBER_SOLID', 'GREEN_SOLID', 'RED_AND_AMBER', 'RELEVANT', 'NON_RELEVANT'])
+        classification_preds = predictions[mask].reset_index(drop=True)
+        classification_preds['area'] = area(classification_preds)
+        classification_preds = classification_preds.groupby('file').apply(extract_traffic_light_colour_from_multi_label)
+        st.dataframe(classification_preds)
+
     assert classification_preds['pred'].isin(POSSIBLE_LABELS).all()
-
     classification_preds = classification_preds.merge(gt, how='right', on='file')
     classification_preds['pred'] = classification_preds['pred'].fillna('NONE')
     classification_preds['confidence'] = classification_preds['confidence'].fillna(0)
     classification_preds['is_true'] = classification_preds['gt'] == classification_preds['pred']
     classification_preds = classification_preds.sort_values('is_true').reset_index(drop=True)
-
     return classification_preds
+
+
+def extract_traffic_light_colour_from_multi_label(df: pd.DataFrame) -> dict:
+    """
+    Given the most relevant prediction, get the largest overlapping traffic light bounding box with a colour
+    Return the colour or 'NONE'
+    """
+    relevant = df.query('name == "RELEVANT"')
+    df_colours = df[df['name'].isin(['RED_SOLID', 'AMBER_SOLID', 'GREEN_SOLID', 'RED_AND_AMBER'])]
+
+    if len(relevant) == 0 or len(df_colours) == 0:
+        colour = 'NONE'
+        conf = 0
+    else:
+        relevant = relevant.sort_values('confidence', ascending=False).iloc[0]
+        row_idx = df_colours.apply(lambda y: area_overlap(relevant, y), axis=1).argmax()
+        colour, conf = df_colours.iloc[row_idx][['name', 'confidence']]
+
+    return pd.Series(dict(pred=colour, confidence=conf))
+
+def area(df):
+    return (df.x1 - df.x0).abs() * (df.y1 - df.y0).abs()
+
+
+def area_overlap(a, b) -> float:
+    dx = abs(min(a.x1, b.x1) - max(a.x0, b.x0))
+    dy = abs(min(a.y1, b.y1) - max(a.y0, b.y0))
+    if (dx>=0) and (dy>=0):
+        return dx*dy / min(a.area, b.area)
+    return 0

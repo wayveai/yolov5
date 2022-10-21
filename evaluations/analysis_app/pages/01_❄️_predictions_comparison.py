@@ -2,9 +2,10 @@ import streamlit as st
 from pathlib import Path
 
 import pandas as pd
+from sklearn.metrics import classification_report
 
 from contants import RESULTS_ROOT, POSSIBLE_LABELS, GROUND_TRUTH_ROOT
-from utils import add_tablet, classification_report, display_classification_report, display_confusion_matrix, display_2d_predictions
+from utils import add_tablet, display_classification_report, display_confusion_matrix, display_2d_predictions
 from loaders import load_entron_v2, load_predictions, get_classification_df
 
 # cache classification_report to make it faster
