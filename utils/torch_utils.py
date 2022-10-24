@@ -108,7 +108,7 @@ def select_device(device='', batch_size=0, newline=True):
     if device is not None and str(device).startswith('mp_inference:'):
         # device = 'mp_inference:cuda:0'
         device = device.replace('mp_inference:', '')
-        print('WARNING, select device has been modified:', device)
+        LOGGER.warning('WARNING, select device has been modified: %s', device)
         return torch.device(device)
 
     # device = None or 'cpu' or 0 or '0' or '0,1,2,3'

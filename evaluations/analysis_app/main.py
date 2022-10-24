@@ -30,7 +30,7 @@ st.info(f'Ground truth dataset size: {len(ground_truth)}')
 no_selection = 'select file'
 prediction_file = st.selectbox(
     'Select model predictions', 
-    [no_selection] + sorted(list(RESULTS_ROOT.glob('*.json'))), 
+    [no_selection] + sorted(list(RESULTS_ROOT.glob('**/*.json'))), 
     format_func=lambda x: x if x == no_selection else add_tablet(x.name)
 )
 if prediction_file == no_selection:

@@ -17,7 +17,7 @@ def load_all_data(file: Path):
     """Handy function to cache large dataframes"""
     metadata, predictions_df = load_predictions(file)
     predictions_df['source'] = file.name
-    classification_df = get_classification_df(predictions_df, ground_truth)
+    classification_df = get_classification_df(predictions_df, ground_truth, metadata)
     return metadata, predictions_df, classification_df
 
 
@@ -26,7 +26,7 @@ st.set_page_config(page_title='Yolo TL CLS', layout='wide', page_icon='🔬')
 st.markdown("# Compare different models predictions")
 st.sidebar.markdown("### Select predictions files")
 
-available_prediction_files = sorted(list(RESULTS_ROOT.glob('*.json')))
+available_prediction_files = sorted(list(RESULTS_ROOT.glob('**/*.json')))
 selected_prediction_files = st.sidebar.multiselect('Select model predictions', available_prediction_files, format_func=lambda x: add_tablet(x.name))
 
 if len(selected_prediction_files) == 0:
