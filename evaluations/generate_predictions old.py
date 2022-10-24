@@ -18,14 +18,6 @@ from torch import nn
 from torch.utils.data import DataLoader, Dataset
 import torch.multiprocessing as mp
 
-from omegaconf import OmegaConf
-import hydra
-from hydra.utils import get_original_cwd, to_absolute_path
-
-import logging 
-
-log = logging.getLogger(__name__)
-
 
 def get_model(path, device: int):
     model = torch.hub.load(
@@ -44,11 +36,12 @@ def get_image_files(root: Union[Path, str]) -> List[str]:
     root = Path(root)
     assert root.exists()
     root = root.resolve()
-    logging.info('Looking for images in: %s', root)
+    print('Looking for images in:', root)
 
     images = [f for f in tqdm(root.glob('**/*.jpeg'), ncols=120, desc="Loading images")]
-    logging.info('Found %i images.', len(images))
+    print(f'Found {len(images)} images.')
     assert all([f.exists() for f in tqdm(images, ncols=120, desc="Checking if images exists.")])
+
     return [str(i) for i in images]
 
 
@@ -69,51 +62,43 @@ class ImageDataset(Dataset):
         return dict(file=str(file), image=torch.from_numpy(normalized_image).permute(2, 0, 1))
 
 
-def _save_example_image(image_file, cfg):
-    img_tensor = ImageDataset([image_file], size=cfg.data.image_size, crop=cfg.data.image_crop)[0]['image']
-    img = (img_tensor.cpu().detach().permute(1, 2, 0).numpy() * 255).astype(np.uint8)
-    img = Image.fromarray(img)
-    img.save(f'./example_{img.size[0]}x{img.size[1]}.jpeg')
-
-
-@hydra.main(version_base=None, config_path="./configs/generate_predictions", config_name="1600x960_with_crop.yaml")
-def main(cfg):
-    cfg.dst = Path(cfg.dst)
-    cfg.weights = Path(get_original_cwd()) / cfg.weights
-    cfg.data.path = Path(cfg.data.path).expanduser()
-    cfg.devices = [f'mp_inference:cuda:{d}' for d in cfg.devices]
-    print(cfg)
+def main_mp(
+        dst_file: Path, 
+        model_path: Path, 
+        image_root: Path, 
+        device: List[str], 
+        image_size: Tuple[int, int], 
+        image_crop: Tuple[int, int, int, int],
+        batch_size: int = 32
+    ):
 
     print('Main Multi-Threaded')
-    print(cfg.data)
+    print(image_root)
 
-    images = get_image_files(cfg.data.path)
-    _save_example_image(images[0], cfg)
-
-
-    n = len(cfg.devices)
-    models = [get_model(cfg.weights, device=d) for d in cfg.devices]
+    n = len(device)
+    models = [get_model(model_path, device=d) for d in device]
     metadata = dict(
-        model=str(cfg.weights), 
+        model=str(model_path), 
         names=models[0].names, 
-        image_size=dict(width=cfg.data.image_size[0], height=cfg.data.image_size[1]), 
-        image_crop={k:v for k, v in zip(['left', 'upper', 'right', 'lower'], cfg.data.image_crop)},
-        image_root=str(cfg.data)
+        image_size=dict(width=image_size[0], height=image_size[1]), 
+        image_crop={k:v for k, v in zip(['left', 'upper', 'right', 'lower'], image_crop)},
+        image_root=str(image_root)
     )
-    
+
+    images = get_image_files(image_root)
+
+    # save an image to see if it looks ok
+    img = ImageDataset(images[:1], size=image_size, crop=image_crop)[0]
+    Image.fromarray(img.cpu().detach().transpose(1, 2, 0)).save('./example.jpeg')
+
     result_queue = mp.Queue()
 
-    def run_inference(model, dataset, queue: mp.Queue) -> Dict[str, str]:
-        width, height = cfg.data.image_size
-        left, upper, *_ = cfg.data.image_crop
-        loader = DataLoader(
-            dataset=ImageDataset(dataset, size=cfg.data.image_size, crop=cfg.data.image_crop), 
-            batch_size=cfg.data.batch_size, 
-            shuffle=False, num_workers=cfg.data.num_workers
-        ) 
-        gen = tqdm(loader, ncols=140, desc=f'Running predictions')
+    def run_inference(model, dataset, queue: mp.Queue,  batch_size: int = 32) -> Dict[str, str]:
+        width, height = image_size
+        left, upper, *_ = image_crop
+        loader = DataLoader(dataset=ImageDataset(dataset, size=image_size, crop=image_crop), batch_size=batch_size, shuffle=False, num_workers=8) 
         with torch.no_grad():
-            for batch in gen:
+            for batch in tqdm(loader, ncols=140, desc=f'Predictions on device'):
                 y = model(batch['image'])
                 y = non_max_suppression(y, conf_thres=0.25, iou_thres=0.45, classes=None, agnostic=False, multi_label=False, max_det=1000) 
                 preds = []
@@ -125,14 +110,13 @@ def main(cfg):
                 
                 for image_file, labels in zip(batch['file'], preds):
                     queue.put((image_file, labels.tolist()))
-    
     if len(cfg.devices) == 1:
-        run_inference(models[0], result_queue)
+        run_inference(models[0], images, result_queue, cfg.batch_size)
     else:
         threads = [
             Thread(
                 target=run_inference, 
-                args=[m, [im for im in images if hash(im) % n == i], result_queue], 
+                args=[m, [im for im in images if hash(im) % n == i], result_queue, cfg.batch_size], 
                 daemon=True
             ) for i, m in enumerate(models)
         ]
@@ -148,11 +132,56 @@ def main(cfg):
         predictions[f] = l
 
     print(f'Saving to file {len(predictions)} predictions')
-    with cfg.dst.open('w') as f:
+    with dst_file.open('w') as f:
         json.dump(dict(metadata=metadata, predictions=predictions), f, indent=4)
     print('Done saving file.')
 
 
+
+def parse_opt():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--weights', '--model-path', type=str, help='model path(s)')
+    parser.add_argument('--data', type=str, help='images root directory')
+    parser.add_argument('--width', type=int, default=1280, help='inference size width')
+    parser.add_argument('--height', type=int, default=832, help='inference size height')
+    parser.add_argument('--crop', default=(0, 0, 1920, 1200), type=int, nargs=4)
+    parser.add_argument('--batch-size', '--bs', type=int, default=32, help='inference size h,w')
+    parser.add_argument('--devices', default=[0], type=int, nargs='+')
+    parser.add_argument('--dst', type=str, help='save results into file')
+    opt = parser.parse_args()
+
+    if isinstance(opt.devices, int):
+        opt.devices = [opt.devices]
+    opt.devices = [f'mp_inference:cuda:{d}' for d in opt.devices]
+    opt.data = Path(opt.data).resolve()
+    opt.dst = Path(opt.dst).resolve()
+    if opt.dst.exists() and opt.dst.name == 'dump.json':
+        print('Deleting dump file.')
+        opt.dst.unlink()
+
+ 
+    assert opt.data.exists()
+    assert opt.dst.parent.exists()
+    if opt.dst.exists():
+        raise FileExistsError(f'Destination file already exists: {opt.dst}')
+
+    return opt
+
+
 if __name__ == "__main__":
-    main()
+    print('\n' * 2)
+    print('=' * 100)
+
+    opt = parse_opt()
+
+    main_mp(
+        dst_file=opt.dst, 
+        model_path=opt.weights, 
+        image_root=opt.data,
+        image_size=(opt.width, opt.height),
+        image_crop=opt.crop,
+        device=opt.devices, 
+        batch_size=opt.batch_size
+    )
+
     
