@@ -1,0 +1,29 @@
+# YOLOv5 🚀 by Ultralytics, GPL-3.0 license
+# COCO 2017 dataset http://cocodataset.org by Microsoft
+# Example usage: python train.py --data coco.yaml
+# parent
+# ├── yolov5
+# └── datasets
+#     └── coco  ← downloads here (20.1 GB)
+
+
+# Train/val/test sets as 1) dir: path/to/imgs, 2) file: path/to/imgs.txt, or 3) list: [path/to/imgs1, path/to/imgs2, ..]
+path: ../dataset/traffic_lights_2020/distorted/ # dataset root dir
+train: train.txt  # train images (relative to 'path') 118287 images
+val: val.txt  # val images (relative to 'path') 5000 images
+test: test.txt  # 20288 of 40670 images, submit to https://competitions.codalab.org/competitions/20794
+
+# Classes
+names:
+  0: NONE_NON_RELEVANT
+  1: NONE_RELEVANT
+  2: UNKNOWN_NON_RELEVANT
+  3: UNKNOWN_RELEVANT
+  4: RED_SOLID_NON_RELEVANT
+  5: RED_SOLID_RELEVANT
+  6: AMBER_SOLID_NON_RELEVANT
+  7: AMBER_SOLID_RELEVANT
+  8: GREEN_SOLID_NON_RELEVANT
+  9: GREEN_SOLID_RELEVANT
+  10: RED_AND_AMBER_NON_RELEVANT
+  11: RED_AND_AMBER_RELEVANT

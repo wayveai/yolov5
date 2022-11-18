@@ -1,0 +1,14 @@
+path: /home/wayve/thomassajot/traffic_lights_2020/undistorted/focal_len=650__sensor_size_hw=1200x1920/cross_product_visible_only/ # dataset root dir
+train: train.txt  # train images (relative to 'path')
+val: val.txt  # val images (relative to 'path')
+test: test.txt
+
+names:
+  0: RED_SOLID_NON_RELEVANT
+  1: RED_SOLID_RELEVANT
+  2: AMBER_SOLID_NON_RELEVANT
+  3: AMBER_SOLID_RELEVANT
+  4: GREEN_SOLID_NON_RELEVANT
+  5: GREEN_SOLID_RELEVANT
+  6: RED_AND_AMBER_NON_RELEVANT
+  7: RED_AND_AMBER_RELEVANT
