@@ -3,13 +3,29 @@ hydra:
     dir: ./evaluations/predictions/bbox/${now:%Y-%m-%d_%H-%M-%S}
   job:
     chdir: True
+  help:
+    app_name: Yolov5 Inference Script on ENTRON dataset
+    header: == ${hydra.help.app_name} ==
+    template: |-
+      ${hydra.help.header}
+
+      Please provide in a configuration file or in the command line the model weights path to evaluate
+      and a destination path of where to save the detected objects.
+
+      == Default Config ==
+      -------
+      $CONFIG
+      -------
+
+      ${hydra.help.footer}
 
 weights: runs/traffic_light_2020_undistorted/yolov5x6_1280_cross_prod_visible_only/weights/best.pt 
 dst: predictions.json
 data:
-  path: ~/dataset/traffic_lights_entron_classification_v2/focal_len=650__sensor_size_hw=1200x1920/
+  path: "/home/thomassajot/dataset/traffic_lights_entron_classification_v2/focal_len=650__sensor_size_hw=1200x1920/"
   image_size: [1600, 960]
-  image_crop: [0, 0, 1920, 1152]
-  batch_size: 22
-  num_workers: 0
+  image_crop: [0, 0, 1600, 704]
+  batch_size: 32
+  num_workers: 8
 devices: 0
+desc: ""

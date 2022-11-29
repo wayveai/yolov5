@@ -637,7 +637,6 @@ class AutoShape(nn.Module):
         #   numpy:           = np.zeros((640,1280,3))  # HWC
         #   torch:           = torch.zeros(16,3,320,640)  # BCHW (scaled to size=640, 0-1 values)
         #   multiple:        = [Image.open('image1.jpg'), Image.open('image2.jpg'), ...]  # list of images
-
         dt = (Profile(), Profile(), Profile())
         with dt[0]:
             if isinstance(size, int):  # expand
@@ -668,8 +667,6 @@ class AutoShape(nn.Module):
                 shape1.append([y * g for y in s])
                 ims[i] = im if im.data.contiguous else np.ascontiguousarray(im)  # update
             shape1 = [make_divisible(x, self.stride) for x in np.array(shape1).max(0)] if self.pt else size  # inf shape
-            print('Shape1 is: ', shape1)
-            print('Shape0 is:', shape0)
             x = [letterbox(im, shape1, auto=False)[0] for im in ims]  # pad
             x = np.ascontiguousarray(np.array(x).transpose((0, 3, 1, 2)))  # stack and BHWC to BCHW
             x = torch.from_numpy(x).to(p.device).type_as(p) / 255  # uint8 to fp16/32

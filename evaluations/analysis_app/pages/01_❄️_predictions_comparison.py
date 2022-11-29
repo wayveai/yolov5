@@ -14,7 +14,14 @@ classification_report = st.cache(classification_report)
 
 @st.cache
 def load_all_data(file: Path):
-    """Handy function to cache large dataframes"""
+    """Handy function to cache large dataframes
+
+    Args:
+        file (Path): json files of predictions
+
+    Returns:
+        pd.DataFrame: with a `source` column which contains the file name
+    """
     metadata, predictions_df = load_predictions(file)
     predictions_df['source'] = file.name
     classification_df = get_classification_df(predictions_df, ground_truth, metadata)
@@ -27,7 +34,7 @@ st.markdown("# Compare different models predictions")
 st.sidebar.markdown("### Select predictions files")
 
 available_prediction_files = sorted(list(RESULTS_ROOT.glob('**/*.json')))
-selected_prediction_files = st.sidebar.multiselect('Select model predictions', available_prediction_files, format_func=lambda x: add_tablet(x.name))
+selected_prediction_files = st.sidebar.multiselect('Select model predictions', available_prediction_files, format_func=lambda x: add_tablet(x.parent.name if x.name == 'predictions.json' else x.name))
 
 if len(selected_prediction_files) == 0:
     st.sidebar.info('Choose a file to load.')

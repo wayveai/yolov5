@@ -8,7 +8,13 @@ import pandas as pd
 from pandas.api.types import is_float_dtype, is_integer_dtype
 
 def add_tablet(s: str):
-    tablet = ['🔴', '🟠', '🟡', '🟢', '🔵', '🟣', '🟤', '⚫', '🟥', '🟦', '🟧', '🟨', '🟩', '🟪', '🟫', '⬛']
+    tablet = [
+        '🔴', '🟠', '🟡', '🟢', '🔵', '🟣', '🟤', '⚫', 
+        '🟥', '🟦', '🟧', '🟨', '🟩', '🟪', '🟫', '⬛', 
+        '❤️', '🧡', '💛', '💚', '💙', '💜', '🤎', '🖤', 
+        '🔶', '🔷',
+        '♜', '♞', '♝', '♛', '♚', '♟', '♖', '♘',	'♗', '♕', '♔', '♙',
+    ]
     selected_tablet = tablet[int(sha256(s.encode('utf-8')).hexdigest(), 16) % len(tablet)]
     return selected_tablet + '  ' + s
 
@@ -25,8 +31,6 @@ def display_confusion_matrix(y_true, y_pred, labels):
     fig, ax = plt.subplots(dpi=120, figsize=(5, 5))
     disp.plot(xticks_rotation='vertical', values_format='.1f', ax=ax, colorbar=False)
     st.pyplot(fig)
-
-
 
 
 def _draw_bbox_with_text(draw, xy, text, size):
