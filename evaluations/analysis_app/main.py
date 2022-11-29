@@ -62,25 +62,32 @@ st.header('Inspect object detections')
 
 col1, col2, col3 = st.columns([2, 2, 4])
 any_label = 'Any label'
-selected_label = col1.selectbox('Choose GT label', [any_label] + POSSIBLE_LABELS)
-selected_pred_label = col2.selectbox('Choose Pred label', [any_label] + POSSIBLE_LABELS)
+any_wrong_label = 'Wrong labels'
+selected_label = col1.selectbox('Choose GT label', [any_label, any_wrong_label] + POSSIBLE_LABELS)
+selected_pred_label = col2.selectbox('Choose Pred label', [any_label, any_wrong_label] + POSSIBLE_LABELS)
 
-query_string = []
-if selected_label != any_label:
-    query_string.append(f'gt == "{selected_label}" ')
-if selected_pred_label != any_label:
-    query_string.append(f'pred == "{selected_pred_label}"')
+if selected_label == any_label and selected_pred_label == any_label:
+    query_string = ''
+elif selected_label in [any_label, any_wrong_label] and selected_pred_label in [any_label, any_wrong_label]:
+    query_string = 'gt != pred'
+elif selected_label not in [any_label, any_wrong_label] and selected_pred_label in [any_label, any_wrong_label]:
+    query_string = f'gt != pred and gt == "{selected_label}"'
+elif selected_label in [any_label, any_wrong_label] and selected_pred_label not in [any_label, any_wrong_label]:
+    query_string = f'gt != pred and pred == "{selected_pred_label}"'
+elif selected_label not in [any_label, any_wrong_label] and selected_pred_label not in [any_label, any_wrong_label]:
+    query_string = f'gt == "{selected_label}" and pred == "{selected_pred_label}"'
 
-images = classification_df.query(' and '.join(query_string))['file'].unique() if query_string else classification_df['file'].unique()
-images = sorted(images)
+col3.text('Filtering query')
+col3.code(query_string, language='shell')
 
-image_name_contains = st.text_input('Specify image should contains')
-selected_image = st.selectbox("Choose image", [i for i in images if image_name_contains in i])
+subset_df = classification_df.query(query_string).copy(True) if query_string else classification_df.copy(True)
+subset_df = subset_df.sort_values(['run_id', 'ts'])
+images = subset_df['file'].unique()
 
 st.info(f'Found {len(images)} images for this filter')
 
 idx = st.number_input("Select image", 0, len(images), 0)
-image_file = selected_image
+image_file = images[idx]
 annotations = predictions_df.query(f'file == "{image_file}"')
 
 if annotations.empty:

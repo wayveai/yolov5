@@ -36,7 +36,8 @@ def predictions_to_dataframe(payload: dict) -> pd.DataFrame:
     preds_df = pd.DataFrame(annotations, columns=['x0', 'y0', 'x1', 'y1', 'confidence', 'class', 'file'])
     preds_df['class'] = preds_df['class'].astype(int).astype(str)
     preds_df['name'] = preds_df['class'].map(payload['metadata']['names'].get)
-
+    preds_df['run_id'] = preds_df['file'].str.split('/', 1).str.get(1).str.rsplit('/', 1).str.get(0)
+    preds_df['ts'] = preds_df['file'].str.rsplit('/', 1).str.get(1).str.replace('unixus.jpeg', '', regex=False).astype(int)
     return preds_df.reset_index()
 
 
