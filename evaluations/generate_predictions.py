@@ -25,16 +25,24 @@ logging.basicConfig(level=logging.DEBUG)
 logging.getLogger().setLevel(logging.DEBUG)
 
 
-def get_model(path, device: int):
-    model = torch.hub.load(
-        repo_or_dir='/mnt/remote/data/users/thomasssajot/yolov5/', 
-        model='custom', 
-        device=device,
-        path=path, 
-        source='local',
-        autoshape=False
-    )
+def get_model(path, device: int, half_precision: bool = False):
+    assert isinstance(half_precision, bool)
+
+    # model = torch.hub.load(
+    #     # repo_or_dir='/mnt/remote/data/users/thomasssajot/yolov5/', 
+    #     model='custom', 
+    #     device=device,
+    #     path=path, 
+    #     source='local',
+    #     autoshape=False
+    # )
+    model = torch.jit.load(path, map_location=device)
     model.eval()
+    if half_precision:
+        logging.info('Using half precision')
+        model.half()
+    else:
+        logging.info('Using full precision')
     return model
 
 
@@ -80,11 +88,10 @@ def _save_example_image(image_file, cfg):
 def run_inference_single_gpu(device: str, images, cfg) -> Dict[str, str]:
     width, height = cfg.data.image_size
     left, upper, *_ = cfg.data.image_crop
-    model = get_model(cfg.weights, device=device)
-
+    model = get_model(cfg.weights, device=device, half_precision=cfg.half_precision)
     metadata = dict(
         model=str(cfg.weights), 
-        names=model.names,
+        # names=model.names,
         image_size=dict(width=cfg.data.image_size[0], height=cfg.data.image_size[1]), 
         image_crop={k:v for k, v in zip(['left', 'upper', 'right', 'lower'], cfg.data.image_crop)},
         image_root=str(cfg.data.path)
@@ -100,7 +107,10 @@ def run_inference_single_gpu(device: str, images, cfg) -> Dict[str, str]:
     image_crop_shift = np.array([left, upper, left, upper])   # shift by image crop
     image_crop_size = np.array([width, height, width, height])
     for batch in gen:
-        y = model(batch['image'].to(model.device))
+        x = batch['image'].to(device)
+        if cfg.half_precision:
+            x = x.half()
+        y = model(x)
         y = non_max_suppression(y, conf_thres=0.25, iou_thres=0.45, classes=None, agnostic=False, multi_label=False, max_det=500) 
 
         for image_file, pred in zip(batch['file'], y):
@@ -128,7 +138,8 @@ def main(cfg):
     cfg.data.path = Path(cfg.data.path).expanduser()
     if isinstance(cfg.devices, int):
         cfg.devices = [cfg.devices]
-    cfg.devices = [f'mp_inference:cuda:{d}' for d in cfg.devices]
+    # cfg.devices = [f'mp_inference:cuda:{d}' for d in cfg.devices]
+    cfg.devices = [f'cuda:{d}' for d in cfg.devices]
     
     logging.info('Starting script')
     logging.info('Config %s', str(cfg))
@@ -166,4 +177,3 @@ def main(cfg):
 
 if __name__ == "__main__":
     main()
-    

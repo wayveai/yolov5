@@ -28,11 +28,10 @@ with st.spinner('Loading ground truth'):
 st.info(f'Ground truth dataset size: {len(ground_truth)}')
 
 no_selection = 'select file'
-prediction_file = st.selectbox(
-    'Select model predictions', 
-    [no_selection] + sorted(list(RESULTS_ROOT.glob('*.json')) + list(RESULTS_ROOT.glob('*/predictions.json'))), 
-    format_func=lambda x: x if x == no_selection else add_tablet(x.parent.name if x.name == 'predictions.json' else x.name)
-)
+available_predictions = sorted(list(RESULTS_ROOT.glob('*.json')) + list(RESULTS_ROOT.glob('*/predictions.json')))
+display_fn_of_pred_files = lambda x: x if x == no_selection else add_tablet(x.parent.name if x.name == 'predictions.json' else x.name)
+prediction_file = st.selectbox('Select model predictions', [no_selection] + available_predictions, format_func=display_fn_of_pred_files)
+
 if prediction_file == no_selection:
     st.stop()
 
